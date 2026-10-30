@@ -1,0 +1,46 @@
+name: loupe_view
+description: "A fast, lightweight, directory-aware image viewer for desktop."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # drag-and-drop support
+  desktop_drop: ^0.5.0
+
+  # local file system & path utilities
+  path: ^1.9.0
+  path_provider: ^2.1.2
+
+  # EXIF & metadata extraction
+  native_exif: ^0.8.0
+
+  # LRU caching for directory preloading
+  quiver: ^3.2.1
+
+  # extended image support & manipulation
+  image: ^4.2.0
+
+  # high-performance gesture zoom/pan canvas
+  vector_math: ^2.4.4
+
+  # native window sizing & titlebar customizations
+  window_manager: ^0.5.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  # asset folder for fallback icons or static resources
+  assets:
+    - assets/
