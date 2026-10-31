@@ -1,5 +1,10 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/gestures.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,7 +73,8 @@ class CustomTitleBar extends StatelessWidget implements PreferredSizeWidget {
         child: Row(
           children: [
             const SizedBox(width: 12),
-            const Icon(Icons.center_focus_strong, size: 18, color: Colors.deepOrangeAccent),
+            const Icon(Icons.center_focus_strong,
+                size: 18, color: Colors.deepOrangeAccent),
             const SizedBox(width: 12),
             // Action Buttons (Settings, Print, Delete)
             _TitleBarActionButton(
@@ -161,7 +167,6 @@ class _TitleBarActionButton extends StatelessWidget {
       message: tooltip,
       waitDuration: const Duration(milliseconds: 400),
       child: GestureDetector(
-        // Intercept double taps so they do not trigger window maximize behaviors
         onDoubleTap: () {},
         child: SizedBox(
           width: 46,
@@ -170,7 +175,7 @@ class _TitleBarActionButton extends StatelessWidget {
             color: Colors.transparent,
             child: InkWell(
               onTap: onPressed,
-              hoverColor: Colors.white.withOpacity(0.08),
+              hoverColor: Colors.white.withValues(alpha: 0.08),
               child: Center(
                 child: Icon(
                   icon,
@@ -203,7 +208,6 @@ class _TitleBarButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      // Intercept double taps to prevent window maximize toggles
       onDoubleTap: () {},
       child: SizedBox(
         width: 46,
@@ -212,7 +216,7 @@ class _TitleBarButton extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onPressed,
-            hoverColor: hoverColor ?? Colors.white.withOpacity(0.08),
+            hoverColor: hoverColor ?? Colors.white.withValues(alpha: 0.08),
             child: Center(
               child: Icon(
                 icon,
@@ -241,12 +245,13 @@ class ImageViewerHUD extends StatelessWidget {
   final VoidCallback? onZoomOut;
   final VoidCallback? onToggleFullscreen;
   final ValueChanged<double>? onZoomSliderChanged;
+  final ValueChanged<double>? onZoomSelected;
 
   const ImageViewerHUD({
     super.key,
     this.fileType = 'JPG',
-    this.dimensions = '1408 x 768',
-    this.fileSize = '397.1 KB',
+    this.dimensions = '---',
+    this.fileSize = '---',
     this.currentZoom = 1.0,
     this.onToggleFilmstrip,
     this.onToggleSlideshow,
@@ -256,6 +261,7 @@ class ImageViewerHUD extends StatelessWidget {
     this.onZoomOut,
     this.onToggleFullscreen,
     this.onZoomSliderChanged,
+    this.onZoomSelected,
   });
 
   @override
@@ -264,9 +270,9 @@ class ImageViewerHUD extends StatelessWidget {
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E), // Solid dark background for docked footer
+        color: const Color(0xFF1E1E1E),
         border: Border(
-          top: BorderSide(color: Colors.white.withOpacity(0.08)),
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
       ),
       child: Row(
@@ -297,7 +303,8 @@ class ImageViewerHUD extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: Row(
                   children: [
-                    Text(fileType, style: _hudTextStyle(fontWeight: FontWeight.bold)),
+                    Text(fileType,
+                        style: _hudTextStyle(fontWeight: FontWeight.bold)),
                     const _VerticalSeparator(),
                     Text(dimensions, style: _hudTextStyle()),
                     const _VerticalSeparator(),
@@ -323,13 +330,16 @@ class ImageViewerHUD extends StatelessWidget {
                 tooltip: 'Zoom out',
                 onPressed: onZoomOut,
               ),
+              // Zoom Slider container (150px)
               SizedBox(
-                width: 90,
+                width: 150,
                 child: SliderTheme(
                   data: SliderThemeData(
                     trackHeight: 2,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+                    thumbShape:
+                        const RoundSliderThumbShape(enabledThumbRadius: 5),
+                    overlayShape:
+                        const RoundSliderOverlayShape(overlayRadius: 10),
                     activeTrackColor: Colors.blueAccent,
                     inactiveTrackColor: Colors.white24,
                     thumbColor: Colors.blueAccent,
@@ -337,7 +347,7 @@ class ImageViewerHUD extends StatelessWidget {
                   child: Slider(
                     value: currentZoom,
                     min: 0.1,
-                    max: 5.0,
+                    max: 8.0,
                     onChanged: onZoomSliderChanged,
                   ),
                 ),
@@ -347,27 +357,55 @@ class ImageViewerHUD extends StatelessWidget {
                 tooltip: 'Zoom in',
                 onPressed: onZoomIn,
               ),
-              const SizedBox(width: 4), // Space between plus icon and zoom list
+              const SizedBox(width: 4),
 
-              // Fixed-width container for zoom preset dropdown
+              // Operational Zoom Preset Dropdown Menu (800% down to 10%)
               SizedBox(
                 width: 58,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.06),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '${(currentZoom * 100).toInt()}%',
-                        style: const TextStyle(fontSize: 11, color: Colors.white70),
-                      ),
-                      const SizedBox(width: 2),
-                      const Icon(Icons.arrow_drop_down, size: 14, color: Colors.white70),
-                    ],
+                child: PopupMenuButton<double>(
+                  tooltip: 'Zoom presets',
+                  offset: const Offset(0, -320),
+                  color: const Color(0xFF2A2A2A),
+                  itemBuilder: (context) => [
+                    _popupItem(8.00, '800%'),
+                    _popupItem(7.00, '700%'),
+                    _popupItem(6.00, '600%'),
+                    _popupItem(5.00, '500%'),
+                    _popupItem(4.00, '400%'),
+                    _popupItem(3.00, '300%'),
+                    _popupItem(2.00, '200%'),
+                    _popupItem(1.50, '150%'),
+                    _popupItem(1.00, '100%'),
+                    _popupItem(0.75, '75%'),
+                    _popupItem(0.50, '50%'),
+                    _popupItem(0.25, '25%'),
+                    _popupItem(0.10, '10%'),
+                  ],
+                  onSelected: (value) {
+                    if (onZoomSelected != null) {
+                      onZoomSelected!(value);
+                    }
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '${(currentZoom * 100).toInt()}%',
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.white70),
+                        ),
+                        const SizedBox(width: 2),
+                        const Icon(Icons.arrow_drop_down,
+                            size: 14, color: Colors.white70),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -382,6 +420,17 @@ class ImageViewerHUD extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  PopupMenuItem<double> _popupItem(double value, String label) {
+    return PopupMenuItem<double>(
+      value: value,
+      height: 32,
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 12, color: Colors.white70),
       ),
     );
   }
@@ -416,7 +465,7 @@ class _HudIconButton extends StatelessWidget {
         child: InkWell(
           onTap: onPressed,
           borderRadius: BorderRadius.circular(4),
-          hoverColor: Colors.white.withOpacity(0.1),
+          hoverColor: Colors.white.withValues(alpha: 0.1),
           child: Padding(
             padding: const EdgeInsets.all(8.0),
             child: Icon(icon, size: 16, color: Colors.white70),
@@ -435,7 +484,7 @@ class _HudDivider extends StatelessWidget {
     return Container(
       height: 18,
       width: 1,
-      color: Colors.white.withOpacity(0.12),
+      color: Colors.white.withValues(alpha: 0.12),
       margin: const EdgeInsets.symmetric(horizontal: 6),
     );
   }
@@ -461,63 +510,346 @@ class MainViewerScreen extends StatefulWidget {
 }
 
 class _MainViewerScreenState extends State<MainViewerScreen> {
+  File? _loadedImageFile;
+  String _fileName = 'No Image Loaded';
+  String _fileExtension = '---';
+  String _dimensions = '---';
+  String _fileSizeStr = '---';
   double _zoomLevel = 1.0;
+  bool _isDraggingOver = false;
+
+  int? _imageWidth;
+  int? _imageHeight;
+  double? _cachedViewportWidth;
+  double? _cachedViewportHeight;
+
+  final TransformationController _transformationController =
+      TransformationController();
+
+// Pure integer percentage state — zero floating-point drift
+  int _zoomPercent = 100;
+
+  bool _isFitToWindow = true; // Starts true when an image loads
+
+  // Clean integer percentage table for presets
+  final List<int> _zoomPresets = [
+    10,
+    25,
+    50,
+    75,
+    100,
+    150,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800
+  ];
+
+  void _zoomIn() {
+    if (kDebugMode) {
+      print('-> _isFitToWindow set to FALSE by _zoomIn');
+    }
+    _isFitToWindow = false; // Manual zoom breaks fit mode
+    int currentIndex = _zoomPresets.indexWhere((p) => p > _zoomPercent);
+    if (currentIndex == -1) currentIndex = _zoomPresets.length - 1;
+    _setZoomPercent(_zoomPresets[currentIndex], _cachedViewportWidth ?? 0.0,
+        _cachedViewportHeight ?? 0.0);
+  }
+
+  void _zoomOut() {
+    if (kDebugMode) {
+      print('-> _isFitToWindow set to FALSE by _zoomOut');
+    }
+    _isFitToWindow = false; // Manual zoom breaks fit mode
+    int currentIndex = _zoomPresets.lastIndexWhere((p) => p < _zoomPercent);
+    if (currentIndex == -1) currentIndex = 0;
+    _setZoomPercent(_zoomPresets[currentIndex], _cachedViewportWidth ?? 0.0,
+        _cachedViewportHeight ?? 0.0);
+  }
+
+  void _zoomToFit(double viewportWidth, double viewportHeight) {
+    if (_imageWidth == null ||
+        _imageHeight == null ||
+        _imageWidth == 0 ||
+        _imageHeight == 0) return;
+
+    final scaleX = viewportWidth / _imageWidth!;
+    final scaleY = viewportHeight / _imageHeight!;
+    double fitScale = scaleX < scaleY ? scaleX : scaleY;
+    fitScale = fitScale.clamp(0.1, 8.0);
+
+    final fitPercent = (fitScale * 100).round();
+
+    if (kDebugMode) {
+      print('-> _isFitToWindow set to TRUE by _zoomToFit');
+    }
+
+    // Explicitly pass isFit: true here!
+    _setZoomPercent(fitPercent, viewportWidth, viewportHeight, isFit: true);
+  }
+
+  void _setZoomPercent(int percent, double viewportWidth, double viewportHeight,
+      {bool isFit = false}) {
+    if (_imageWidth == null ||
+        _imageHeight == null ||
+        _imageWidth == 0 ||
+        _imageHeight == 0) return;
+
+    if (kDebugMode) {
+      print('-> _isFitToWindow set to $isFit by _setZoomPercent');
+    }
+
+    _isFitToWindow = isFit; // Only true if explicitly called by fit-to-window
+
+    final clampedPercent = percent.clamp(10, 800);
+    final scale = clampedPercent / 100.0;
+
+    setState(() {
+      _zoomPercent = clampedPercent;
+    });
+
+    final dx = (viewportWidth - _imageWidth! * scale) / 2;
+    final dy = (viewportHeight - _imageHeight! * scale) / 2;
+
+    final matrix = Matrix4.identity()
+      ..translateByDouble(dx, dy, 0.0, 1.0)
+      ..scaleByDouble(scale, scale, 1.0, 1.0);
+
+    _transformationController.value = matrix;
+  }
+
+  void _zoomByStep(int delta) {
+    if (kDebugMode) {
+      print('-> _isFitToWindow set to FALSE by _zoomByStep');
+    }
+
+    _isFitToWindow = false; // Manual scroll breaks fit mode
+    int newPercent;
+    if (delta > 0) {
+      newPercent = ((_zoomPercent + 10) ~/ 10) * 10;
+      if (newPercent <= _zoomPercent) newPercent += 10;
+    } else {
+      newPercent = (_zoomPercent ~/ 10) * 10;
+      if (newPercent >= _zoomPercent) newPercent -= 10;
+    }
+    newPercent = newPercent.clamp(10, 800);
+    _setZoomPercent(
+        newPercent, _cachedViewportWidth ?? 0.0, _cachedViewportHeight ?? 0.0);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _transformationController.addListener(_onTransformationChanged);
+  }
+
+  @override
+  void dispose() {
+    _transformationController.removeListener(_onTransformationChanged);
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  void _onTransformationChanged() {
+    final currentScale = _transformationController.value.getMaxScaleOnAxis();
+    if ((currentScale - _zoomLevel).abs() > 0.005) {
+      setState(() {
+        _zoomLevel = currentScale.clamp(0.1, 8.0);
+      });
+    }
+  }
+
+  Future<void> _handleDroppedFile(File file) async {
+    final bytes = await file.length();
+    final sizeKb = (bytes / 1024).toStringAsFixed(1);
+    final ext = file.path.split('.').last.toUpperCase();
+    final name = file.uri.pathSegments.last;
+
+    int? width;
+    int? height;
+    var dimensionsStr = 'Unknown';
+    try {
+      final decodedImage = await _getImageDimensions(file);
+      if (decodedImage != null) {
+        width = decodedImage.image.width;
+        height = decodedImage.image.height;
+        dimensionsStr = '$width x $height';
+      }
+    } catch (_) {}
+
+    setState(() {
+      _loadedImageFile = file;
+      _fileName = '$name [1/1]';
+      _fileExtension = ext;
+      _fileSizeStr = '$sizeKb KB';
+      _dimensions = dimensionsStr;
+      _imageWidth = width;
+      _imageHeight = height;
+    });
+
+    if (_cachedViewportWidth != null && _cachedViewportHeight != null) {
+      _zoomToFit(_cachedViewportWidth!, _cachedViewportHeight!);
+    } else {
+      _transformationController.value = Matrix4.identity();
+    }
+  }
+
+  Future<ImageInfo?> _getImageDimensions(File file) async {
+    final completer = Completer<ImageInfo?>();
+    final image = Image.file(file);
+    final stream = image.image.resolve(const ImageConfiguration());
+
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener((info, synchronousCall) {
+      stream.removeListener(listener);
+      completer.complete(info);
+    }, onError: (exception, stackTrace) {
+      stream.removeListener(listener);
+      completer.complete(null);
+    });
+
+    stream.addListener(listener);
+    return completer.future;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: const CustomTitleBar(currentTitle: 'sample_photo_01.jpg [1/24]'),
-      body: Stack(
-        children: [
-          // Background Image Canvas area
-          Container(
-            color: const Color(0xFF121212),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.center_focus_strong, size: 64, color: Colors.deepOrangeAccent),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Loupe View',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Drag and drop an image or folder here to begin',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-          ),
+    return DropTarget(
+      onDragEntered: (details) => setState(() => _isDraggingOver = true),
+      onDragExited: (details) => setState(() => _isDraggingOver = false),
+      onDragDone: (details) async {
+        setState(() => _isDraggingOver = false);
+        if (details.files.isNotEmpty) {
+          final droppedFile = File(details.files.first.path);
+          await _handleDroppedFile(droppedFile);
+        }
+      },
+      child: Scaffold(
+          appBar: CustomTitleBar(currentTitle: _fileName),
+          body: Stack(
+            children: [
+              // 1. Background Canvas / Image View Area
+              Positioned.fill(
+                child: Listener(
+                  onPointerSignal: (pointerSignal) {
+                    if (pointerSignal is PointerScrollEvent) {
+                      final int step =
+                          pointerSignal.scrollDelta.dy < 0 ? 10 : -10;
+                      _zoomByStep(step);
+                    }
+                  },
+                  child: _loadedImageFile == null
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.center_focus_strong,
+                                  size: 64, color: Colors.deepOrangeAccent),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Loupe View',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Drag and drop an image or folder here to begin',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        )
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            final newWidth = constraints.maxWidth;
+                            final newHeight = constraints.maxHeight;
 
-          // Docked Footer status bar pinned right at the bottom edge
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: ImageViewerHUD(
-              currentZoom: _zoomLevel,
-              onZoomSliderChanged: (value) {
-                setState(() {
-                  _zoomLevel = value;
-                });
-              },
-              onZoomIn: () {
-                setState(() {
-                  _zoomLevel = (_zoomLevel + 0.25).clamp(0.1, 5.0);
-                });
-              },
-              onZoomOut: () {
-                setState(() {
-                  _zoomLevel = (_zoomLevel - 0.25).clamp(0.1, 5.0);
-                });
-              },
-            ),
-          ),
-        ],
-      ),
+                            if (_imageWidth != null &&
+                                _imageHeight != null &&
+                                (newWidth != (_cachedViewportWidth ?? 0.0) ||
+                                    newHeight !=
+                                        (_cachedViewportHeight ?? 0.0))) {
+                              _cachedViewportWidth = newWidth;
+                              _cachedViewportHeight = newHeight;
+
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (kDebugMode) {
+                                  print(
+                                      'Window resized! Width: $newWidth, Height: $newHeight, IsFit: $_isFitToWindow');
+                                }
+                                if (_isFitToWindow) {
+                                  // Dynamically re-fit to the new window dimensions
+                                  _zoomToFit(newWidth, newHeight);
+                                } else {
+                                  // Maintain current fixed zoom percent, recenter canvas
+                                  final scale = _zoomPercent / 100.0;
+                                  final dx =
+                                      (newWidth - _imageWidth! * scale) / 2;
+                                  final dy =
+                                      (newHeight - _imageHeight! * scale) / 2;
+
+                                  _transformationController.value =
+                                      Matrix4.identity()
+                                        ..translateByDouble(dx, dy, 0.0, 1.0)
+                                        ..scaleByDouble(scale, scale, 1.0, 1.0);
+                                }
+                              });
+                            }
+
+                            return Container(
+                              color: const Color(0xFF121212),
+                              child: InteractiveViewer(
+                                transformationController:
+                                    _transformationController,
+                                scaleEnabled:
+                                    false, // Handled manually via scroll and buttons
+                                panEnabled: true,
+                                minScale: 0.1,
+                                maxScale: 8.0,
+                                constrained: false,
+                                child: SizedBox(
+                                  width: _imageWidth!.toDouble(),
+                                  height: _imageHeight!.toDouble(),
+                                  child: Image.file(_loadedImageFile!),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ),
+
+              // 2. Docked Footer Status Bar / HUD
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: ImageViewerHUD(
+                  fileType: _fileExtension,
+                  dimensions: _dimensions,
+                  fileSize: _fileSizeStr,
+                  currentZoom: _zoomPercent / 100.0,
+                  onZoomSliderChanged: (value) => _setZoomPercent(
+                      (value * 100).round(),
+                      _cachedViewportWidth ?? 0.0,
+                      _cachedViewportHeight ?? 0.0),
+                  onZoomSelected: (value) => _setZoomPercent(
+                      (value * 100).round(),
+                      _cachedViewportWidth ?? 0.0,
+                      _cachedViewportHeight ?? 0.0),
+                  onZoomIn: _zoomIn,
+                  onZoomOut: _zoomOut,
+                  onZoomFit: () => _zoomToFit(_cachedViewportWidth ?? 0.0,
+                      _cachedViewportHeight ?? 0.0),
+                ),
+              ),
+            ],
+          )),
     );
   }
 }

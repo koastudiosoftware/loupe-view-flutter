@@ -38,10 +38,10 @@ class ImageViewerHUD extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xCC1E1E1E), // Translucent dark background
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.4),
+            color: Colors.black.withValues(alpha: 0.4),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -126,7 +126,7 @@ class ImageViewerHUD extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.06),
+              color: Colors.white.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Row(
@@ -185,7 +185,7 @@ class _HudIconButton extends StatelessWidget {
         child: InkWell(
           onTap: onPressed,
           borderRadius: BorderRadius.circular(4),
-          hoverColor: Colors.white.withOpacity(0.1),
+          hoverColor: Colors.white.withValues(alpha: 0.1),
           child: Padding(
             padding: const EdgeInsets.all(8.0),
             child: Icon(icon, size: 16, color: Colors.white70),
@@ -204,7 +204,7 @@ class _HudDivider extends StatelessWidget {
     return Container(
       height: 18,
       width: 1,
-      color: Colors.white.withOpacity(0.12),
+      color: Colors.white.withValues(alpha: 0.12),
       margin: const EdgeInsets.symmetric(horizontal: 6),
     );
   }
