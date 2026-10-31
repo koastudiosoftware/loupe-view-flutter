@@ -5,6 +5,18 @@ class ImageInspectorViewModel extends ChangeNotifier {
   final TransformationController transformationController =
       TransformationController();
 
+  // collection index/total
+  int _imageIndex = 1;
+  int get imageIndex => _imageIndex;
+
+  int _totalImages = 1;
+  int get totalImages => _totalImages;
+
+  // Info panel visibility state
+  bool _isInfoVisible = false;
+  bool get isInfoVisible => _isInfoVisible;
+
+  // Image zoom/scale state
   int _zoomPercent = 100;
   int get zoomPercent => _zoomPercent;
 
@@ -57,9 +69,20 @@ class ImageInspectorViewModel extends ChangeNotifier {
     }
   }
 
+void toggleInfoPanel() {
+    _isInfoVisible = !_isInfoVisible;
+    notifyListeners();
+  }
+
   void setImageDimensions(int width, int height) {
     _imageWidth = width;
     _imageHeight = height;
+    notifyListeners();
+  }
+
+  void setImageIndex(int index, int total) {
+    _imageIndex = index;
+    _totalImages = total;
     notifyListeners();
   }
 

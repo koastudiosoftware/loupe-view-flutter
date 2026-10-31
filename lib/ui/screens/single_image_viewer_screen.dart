@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/gestures.dart';
 import '../components/window_title_bar.dart';
 import '../components/image_viewer_hud.dart';
-import '../../viewmodels/image_inspector_vm.dart'; // Import your new ViewModel
+import '../../viewmodels/image_inspector_vm.dart';
+import '../components/image_info_panel.dart';
 
 class SingleImageViewerScreen extends StatefulWidget {
   const SingleImageViewerScreen({super.key});
@@ -21,8 +23,10 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
 
   File? _loadedImageFile;
   String _fileName = 'No Image Loaded';
+  String _fileBaseName = '---';
   String _fileExtension = '---';
   String _dimensions = '---';
+  String _folderPath = '---';
   String _fileSizeStr = '---';
   bool _isDraggingOver = false;
 
@@ -41,8 +45,10 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
   Future<void> _handleDroppedFile(File file) async {
     final bytes = await file.length();
     final sizeKb = (bytes / 1024).toStringAsFixed(1);
-    final ext = file.path.split('.').last.toUpperCase();
-    final name = file.uri.pathSegments.last;
+    final ext = p.extension(file.path).toUpperCase();
+    final name = p.basename(file.path);
+    final baseName = p.basenameWithoutExtension(file.path);
+    final folderPath = p.dirname(file.path);
 
     int? width;
     int? height;
@@ -58,15 +64,20 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
 
     setState(() {
       _loadedImageFile = file;
-      _fileName = '$name [1/1]';
+      _fileName = name;
+      _fileBaseName = baseName;
       _fileExtension = ext;
       _fileSizeStr = '$sizeKb KB';
       _dimensions = dimensionsStr;
+      _folderPath = folderPath;
     });
 
     if (width != null && height != null) {
       _viewModel.setImageDimensions(width, height);
     }
+
+    // Set initial index/total state (ready for multi-file expansion later)
+    _viewModel.setImageIndex(1, 1);
   }
 
   Future<ImageInfo?> _getImageDimensions(File file) async {
@@ -100,75 +111,109 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
         }
       },
       child: Scaffold(
-        appBar: WindowTitleBar(currentTitle: _fileName),
+        appBar: WindowTitleBar(
+          currentTitle: _loadedImageFile == null
+              ? 'Loupe View'
+              : '$_fileName [${_viewModel.imageIndex}/${_viewModel.totalImages}]',
+        ),
         body: ListenableBuilder(
           listenable: _viewModel,
           builder: (context, child) {
             return Stack(
               children: [
+                // 1. Background Canvas / Image View Area (Wrapped with animated padding to push the image)
                 Positioned.fill(
-                  child: Listener(
-                    onPointerSignal: (pointerSignal) {
-                      if (pointerSignal is PointerScrollEvent) {
-                        final int step =
-                            pointerSignal.scrollDelta.dy < 0 ? 10 : -10;
-                        _viewModel.zoomByStep(step);
-                      }
-                    },
-                    child: _loadedImageFile == null
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.center_focus_strong,
-                                    size: 64, color: Colors.deepOrangeAccent),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Loupe View',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .headlineMedium
-                                      ?.copyWith(fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Drag and drop an image or folder here to begin',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          )
-                        : LayoutBuilder(
-                            builder: (context, constraints) {
-                              // Feed layout size changes to the ViewModel safely
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                _viewModel.updateViewport(constraints.maxWidth,
-                                    constraints.maxHeight);
-                              });
-
-                              return Container(
-                                color: const Color(0xFF121212),
-                                child: InteractiveViewer(
-                                  transformationController:
-                                      _viewModel.transformationController,
-                                  scaleEnabled: false,
-                                  panEnabled: true,
-                                  minScale: 0.1,
-                                  maxScale: 8.0,
-                                  constrained: false,
-                                  child: SizedBox(
-                                    width: (_viewModel.imageWidth ?? 100)
-                                        .toDouble(),
-                                    height: (_viewModel.imageHeight ?? 100)
-                                        .toDouble(),
-                                    child: Image.file(_loadedImageFile!),
+                  child: AnimatedPadding(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeInOut,
+                    // Push the image right by 320px when the panel is open, 0 when closed
+                    padding: EdgeInsets.only(
+                        left: _viewModel.isInfoVisible ? 320.0 : 0.0),
+                    child: Listener(
+                      onPointerSignal: (pointerSignal) {
+                        if (pointerSignal is PointerScrollEvent) {
+                          final int step =
+                              pointerSignal.scrollDelta.dy < 0 ? 10 : -10;
+                          _viewModel.zoomByStep(step);
+                        }
+                      },
+                      child: _loadedImageFile == null
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.center_focus_strong,
+                                      size: 64, color: Colors.deepOrangeAccent),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Loupe View',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineMedium
+                                        ?.copyWith(fontWeight: FontWeight.bold),
                                   ),
-                                ),
-                              );
-                            },
-                          ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Drag and drop an image or folder here to begin',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : LayoutBuilder(
+                              builder: (context, constraints) {
+                                // Feed layout size changes to the ViewModel safely
+                                WidgetsBinding.instance
+                                    .addPostFrameCallback((_) {
+                                  _viewModel.updateViewport(
+                                      constraints.maxWidth,
+                                      constraints.maxHeight);
+                                });
+
+                                return Container(
+                                  color: const Color(0xFF121212),
+                                  child: InteractiveViewer(
+                                    transformationController:
+                                        _viewModel.transformationController,
+                                    scaleEnabled: false,
+                                    panEnabled: true,
+                                    minScale: 0.1,
+                                    maxScale: 8.0,
+                                    constrained: false,
+                                    child: SizedBox(
+                                      width: (_viewModel.imageWidth ?? 100)
+                                          .toDouble(),
+                                      height: (_viewModel.imageHeight ?? 100)
+                                          .toDouble(),
+                                      child: Image.file(_loadedImageFile!),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
                   ),
                 ),
+
+                // 2. Left Slide-Out Info Panel
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  left: _viewModel.isInfoVisible ? 0 : -320,
+                  top: 0,
+                  bottom: 44, // Sits right above the HUD status bar
+                  width: 320,
+                  child: ImageInfoPanel(
+                    folderPath: _folderPath,
+                    fileName: _fileBaseName,
+                    filePath: _loadedImageFile?.path ?? 'No file path',
+                    fileSize: _fileSizeStr,
+                    dimensions: _dimensions,
+                    onClose: _viewModel.toggleInfoPanel,
+                  ),
+                ),
+
+                // 3. Docked Footer Status Bar / HUD
                 Positioned(
                   bottom: 0,
                   left: 0,
@@ -186,6 +231,7 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
                     onZoomIn: _viewModel.zoomIn,
                     onZoomOut: _viewModel.zoomOut,
                     onZoomFit: _viewModel.zoomToFit,
+                    onToggleInfo: _viewModel.toggleInfoPanel,
                   ),
                 ),
               ],
