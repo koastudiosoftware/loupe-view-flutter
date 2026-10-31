@@ -366,21 +366,10 @@ class ImageViewerHUD extends StatelessWidget {
                   tooltip: 'Zoom presets',
                   offset: const Offset(0, -320),
                   color: const Color(0xFF2A2A2A),
-                  itemBuilder: (context) => [
-                    _popupItem(8.00, '800%'),
-                    _popupItem(7.00, '700%'),
-                    _popupItem(6.00, '600%'),
-                    _popupItem(5.00, '500%'),
-                    _popupItem(4.00, '400%'),
-                    _popupItem(3.00, '300%'),
-                    _popupItem(2.00, '200%'),
-                    _popupItem(1.50, '150%'),
-                    _popupItem(1.00, '100%'),
-                    _popupItem(0.75, '75%'),
-                    _popupItem(0.50, '50%'),
-                    _popupItem(0.25, '25%'),
-                    _popupItem(0.10, '10%'),
-                  ],
+                  itemBuilder: (context) => _MainViewerScreenState._zoomPresets.reversed.map((preset) {
+                    final scale = preset / 100.0;
+                    return _popupItem(scale, '$preset%');
+                  }).toList(),
                   onSelected: (value) {
                     if (onZoomSelected != null) {
                       onZoomSelected!(value);
@@ -532,7 +521,7 @@ class _MainViewerScreenState extends State<MainViewerScreen> {
   bool _isFitToWindow = true; // Starts true when an image loads
 
   // Clean integer percentage table for presets
-  final List<int> _zoomPresets = [
+  static const List<int> _zoomPresets = [
     10,
     25,
     50,
