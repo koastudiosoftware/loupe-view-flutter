@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
-import 'ui/screens/main_viewer_screen.dart';
+import 'ui/screens/single_image_viewer_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
