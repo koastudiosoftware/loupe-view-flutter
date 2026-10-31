@@ -42,7 +42,7 @@ class LoupeViewApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const MainViewerScreen(),
+      home: const SingleImageViewerScreen(),
     );
   }
 }

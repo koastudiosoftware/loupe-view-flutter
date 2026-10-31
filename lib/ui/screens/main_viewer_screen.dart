@@ -7,14 +7,14 @@ import 'package:flutter/gestures.dart';
 import '../components/window_title_bar.dart';
 import '../components/image_viewer_hud.dart';
 
-class MainViewerScreen extends StatefulWidget {
-  const MainViewerScreen({super.key});
+class SingleImageViewerScreen extends StatefulWidget {
+  const SingleImageViewerScreen({super.key});
 
   @override
-  State<MainViewerScreen> createState() => _MainViewerScreenState();
+  State<SingleImageViewerScreen> createState() => _SingleImageViewerScreenState();
 }
 
-class _MainViewerScreenState extends State<MainViewerScreen> {
+class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
   File? _loadedImageFile;
   String _fileName = 'No Image Loaded';
   String _fileExtension = '---';
