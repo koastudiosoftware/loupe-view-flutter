@@ -91,17 +91,14 @@ class _ImageInfoPanelState extends State<ImageInfoPanel> {
       final h = int.parse(parts[1].trim());
       if (h == 0) return 'Unknown';
 
-      int gcd(int a, int b) => b == 0 ? a : gcd(b, a % b);
-      final divisor = gcd(w, h);
-      final simplifyW = w ~/ divisor;
-      final simplifyH = h ~/ divisor;
-
       String label = '';
-      if ((w / h - 16 / 9).abs() < 0.05)
+      if ((w / h - 16 / 9).abs() < 0.05) {
         label = '16:9';
-      else if ((w / h - 4 / 3).abs() < 0.05)
+      } else if ((w / h - 4 / 3).abs() < 0.05) {
         label = '4:3';
-      else if ((w / h - 1 / 1).abs() < 0.05) label = '1:1 (Square)';
+      } else if ((w / h - 1 / 1).abs() < 0.05) {
+        label = '1:1 (Square)';
+      }
 
       if (label.isNotEmpty) return label;
       return '${(w / h).toStringAsFixed(2)}:1';
