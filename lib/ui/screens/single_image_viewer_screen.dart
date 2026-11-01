@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/gestures.dart';
+import 'package:exif/exif.dart'; // Ensure exif package is imported
 import '../components/window_title_bar.dart';
 import '../components/image_viewer_hud.dart';
 import '../../viewmodels/image_inspector_vm.dart';
@@ -27,7 +28,8 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
   String _fileExtension = '---';
   String _dimensions = '---';
   String _folderPath = '---';
-  String _fileSizeStr = '---';
+  int _fileSizeCategory = 0;
+  Map<String, String> _rawExifData = {};
   bool _isDraggingOver = false;
 
   @override
@@ -42,13 +44,54 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
     super.dispose();
   }
 
+  String _formatBytes(int bytes) {
+    if (bytes <= 0) return '---';
+    if (bytes < 1024) return '$bytes Bytes';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
+  Future<Map<String, String>> _collectExifData(File file) async {
+    final Map<String, String> exifMap = {};
+    try {
+      final fileBytes = await file.readAsBytes();
+      final tags = await readExifFromBytes(fileBytes);
+
+      if (tags.isEmpty) {
+        if (kDebugMode) print('EXIF DEBUG: No EXIF tags found in ${file.path}');
+        return exifMap;
+      }
+
+      tags.forEach((key, value) {
+        exifMap[key] = value.toString();
+      });
+
+      if (kDebugMode) {
+        print('--- EXIF HASH MAP CONTENTS FOR: ${p.basename(file.path)} ---');
+        exifMap.forEach((k, v) {
+          if (kDebugMode) {
+            print('$k: $v');
+          }
+        });
+        print('------------------------------------------------------------');
+      }
+    } catch (e) {
+      if (kDebugMode) print('EXIF DEBUG ERROR: Failed to parse EXIF - $e');
+    }
+
+    return exifMap;
+  }
+
   Future<void> _handleDroppedFile(File file) async {
     final bytes = await file.length();
-    final sizeKb = (bytes / 1024).toStringAsFixed(1);
     final ext = p.extension(file.path).toUpperCase();
     final name = p.basename(file.path);
     final baseName = p.basenameWithoutExtension(file.path);
     final folderPath = p.dirname(file.path);
+
+    // Collect real EXIF tags into the hash map
+    final extractedExif = await _collectExifData(file);
 
     int? width;
     int? height;
@@ -67,16 +110,16 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
       _fileName = name;
       _fileBaseName = baseName;
       _fileExtension = ext;
-      _fileSizeStr = '$sizeKb KB';
+      _fileSizeCategory = bytes;
       _dimensions = dimensionsStr;
       _folderPath = folderPath;
+      _rawExifData = extractedExif; // Properly assign the extracted EXIF map here
     });
 
     if (width != null && height != null) {
       _viewModel.setImageDimensions(width, height);
     }
 
-    // Set initial index/total state (ready for multi-file expansion later)
     _viewModel.setImageIndex(1, 1);
   }
 
@@ -121,14 +164,13 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
           builder: (context, child) {
             return Stack(
               children: [
-                // 1. Background Canvas / Image View Area (Wrapped with animated padding to push the image)
+                // 1. Background Canvas / Image View Area
                 Positioned.fill(
                   child: AnimatedPadding(
                     duration: const Duration(milliseconds: 250),
                     curve: Curves.easeInOut,
-                    // Push the image right by 320px when the panel is open, 0 when closed
                     padding: EdgeInsets.only(
-                        left: _viewModel.isInfoVisible ? 320.0 : 0.0),
+                        left: _viewModel.isInfoVisible ? 400.0 : 0.0),
                     child: Listener(
                       onPointerSignal: (pointerSignal) {
                         if (pointerSignal is PointerScrollEvent) {
@@ -162,7 +204,6 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
                             )
                           : LayoutBuilder(
                               builder: (context, constraints) {
-                                // Feed layout size changes to the ViewModel safely
                                 WidgetsBinding.instance
                                     .addPostFrameCallback((_) {
                                   _viewModel.updateViewport(
@@ -195,20 +236,21 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
                   ),
                 ),
 
-                // 2. Left Slide-Out Info Panel
+                // 2. Left Slide-Out Info Panel (400px width)
                 AnimatedPositioned(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeInOut,
-                  left: _viewModel.isInfoVisible ? 0 : -320,
+                  left: _viewModel.isInfoVisible ? 0 : -400,
                   top: 0,
-                  bottom: 44, // Sits right above the HUD status bar
-                  width: 320,
+                  bottom: 44,
+                  width: 400,
                   child: ImageInfoPanel(
                     folderPath: _folderPath,
                     fileName: _fileBaseName,
                     filePath: _loadedImageFile?.path ?? 'No file path',
-                    fileSize: _fileSizeStr,
+                    fileSize: _fileSizeCategory,
                     dimensions: _dimensions,
+                    exifData: _rawExifData,
                     onClose: _viewModel.toggleInfoPanel,
                   ),
                 ),
@@ -221,7 +263,9 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
                   child: ImageViewerHUD(
                     fileType: _fileExtension,
                     dimensions: _dimensions,
-                    fileSize: _fileSizeStr,
+                    fileSize: _fileSizeCategory == 0
+                        ? '---'
+                        : _formatBytes(_fileSizeCategory),
                     currentZoom: _viewModel.zoomPercent / 100.0,
                     zoomPresets: ImageInspectorViewModel.zoomPresets,
                     onZoomSliderChanged: (value) =>
