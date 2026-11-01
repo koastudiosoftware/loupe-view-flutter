@@ -84,6 +84,14 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
   }
 
   Future<void> _handleDroppedFile(File file) async {
+    // Reset view matrix and cached state when a new file is loaded via drop
+    _viewModel.transformationController.value = Matrix4.identity();
+
+    // Applying your correction rule for nullable viewport caching
+    setState(() {
+      _cachedViewportWidth = null;
+    });
+
     final bytes = await file.length();
     final ext = p.extension(file.path).toUpperCase();
     final name = p.basename(file.path);
@@ -113,7 +121,7 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
       _fileSizeCategory = bytes;
       _dimensions = dimensionsStr;
       _folderPath = folderPath;
-      _rawExifData = extractedExif; // Properly assign the extracted EXIF map here
+      _rawExifData = extractedExif;
     });
 
     if (width != null && height != null) {
@@ -121,7 +129,15 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
     }
 
     _viewModel.setImageIndex(1, 1);
+
+    // Force an initial scale-to-fit calculation on the next frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _viewModel.zoomToFit();
+    });
   }
+
+  // Declaring a local variable reference matching your viewport tracking convention
+  double? _cachedViewportWidth;
 
   Future<ImageInfo?> _getImageDimensions(File file) async {
     final completer = Completer<ImageInfo?>();
@@ -204,10 +220,12 @@ class _SingleImageViewerScreenState extends State<SingleImageViewerScreen> {
                             )
                           : LayoutBuilder(
                               builder: (context, constraints) {
+                                _cachedViewportWidth = constraints.maxWidth; // Safely track viewport width
+
                                 WidgetsBinding.instance
                                     .addPostFrameCallback((_) {
                                   _viewModel.updateViewport(
-                                      constraints.maxWidth,
+                                      (_cachedViewportWidth ?? 0.0),
                                       constraints.maxHeight);
                                 });
 
